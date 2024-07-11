@@ -12,13 +12,13 @@ const getAllUsers = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: 'No users found' });
     }
     res.json(users);
-}); 
+});
 
 const createNewUser = asyncHandler(async (req, res) => {
-    const { username, password, roles } = req.body;
+    const { username, password, roles, active } = req.body;
 
     // confirm data
-    if (!username || !password || !Array.isArray(roles) || !roles.length) {
+    if (!username || !password || !Array.isArray(roles) || !roles.length || typeof active !== 'boolean') {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
@@ -29,10 +29,15 @@ const createNewUser = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: 'Duplicate username' });
     }
 
+    // Ensure only 'Employee' role can be assigned
+    if (!roles.includes('Employee') || roles.length > 1) {
+        return res.status(400).json({ message: 'Only "Employee" role can be assigned' });
+    }
+
     // hash password
     const hashedPwd = await bcrypt.hash(password, 10); // salt rounds
 
-    const userObject = { username, "password": hashedPwd, roles };
+    const userObject = { username, "password": hashedPwd, roles, active };
 
     // create and store new user
     const user = await User.create(userObject);
@@ -42,7 +47,7 @@ const createNewUser = asyncHandler(async (req, res) => {
     } else {
         res.status(400).json({ message: 'Invalid user data received' });
     }
-}); 
+});
 
 const updateUser = asyncHandler(async (req, res) => {
     const { id, username, roles, active, password } = req.body;
@@ -75,7 +80,7 @@ const updateUser = asyncHandler(async (req, res) => {
     const updatedUser = await user.save();
 
     res.json({ message: `${updatedUser.username} updated` });
-}); 
+});
 
 const deleteUser = asyncHandler(async (req, res) => {
     const { id } = req.body;
@@ -86,7 +91,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 
     const note = await Note.findOne({ user: id }).lean().exec();
 
-    if (note?.length) { 
+    if (note) {
         return res.status(400).json({ message: 'User has assigned notes' });
     }
 
@@ -98,10 +103,10 @@ const deleteUser = asyncHandler(async (req, res) => {
 
     const result = await user.deleteOne(); // returns { deletedCount: 1 }
 
-    const reply = `Username ${result.username} with ID ${result._id} deleted`;
+    const reply = `Username ${user.username} with ID ${user._id} deleted`;
 
     res.json(reply);
-}); 
+});
 
 module.exports = {
     getAllUsers,
