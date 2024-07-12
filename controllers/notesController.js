@@ -1,122 +1,135 @@
-const Note = require('../models/Note');
-const User = require('../models/User');
-const asyncHandler = require('express-async-handler');
+const Note = require('../models/Note')
+const User = require('../models/User')
+const asyncHandler = require('express-async-handler')
+
+// Function to strip Zero Width Space characters
+const stripZeroWidthSpace = (str) => str.replace(/[\u200B-\u200D\uFEFF]/g, '')
 
 // @desc Get all notes 
 // @route GET /notes
 // @access Private
 const getAllNotes = asyncHandler(async (req, res) => {
     // Get all notes from MongoDB
-    const notes = await Note.find().lean();
+    const notes = await Note.find().lean()
 
     // If no notes 
     if (!notes?.length) {
-        return res.status(400).json({ message: 'No notes found' });
+        return res.status(400).json({ message: 'No notes found' })
     }
 
     // Add username to each note before sending the response 
-    // See Promise.all with map() here: https://youtu.be/4lqJBBEpjRE 
-    // You could also do this with a for...of loop
     const notesWithUser = await Promise.all(notes.map(async (note) => {
-        const user = await User.findById(note.user).lean().exec();
-        return { ...note, username: user ? user.username : 'Unknown' };
-    }));
+        const user = await User.findById(note.user).lean().exec()
+        return { ...note, username: user?.username || 'Unknown' }
+    }))
 
-    res.json(notesWithUser);
-});
+    res.json(notesWithUser)
+})
 
 // @desc Create new note
 // @route POST /notes
 // @access Private
 const createNewNote = asyncHandler(async (req, res) => {
-    const { user, title, text } = req.body;
+    let { user, title, text } = req.body
+
+    // Strip Zero Width Space characters
+    user = stripZeroWidthSpace(user)
+    title = stripZeroWidthSpace(title)
+    text = stripZeroWidthSpace(text)
 
     // Confirm data
     if (!user || !title || !text) {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({ message: 'All fields are required' })
+    }
+
+    // Check if user exists
+    const existingUser = await User.findById(user).exec()
+    if (!existingUser) {
+        // Create a new user with username 'Unknown'
+        user = await User.create({ _id: user, username: 'Unknown', password: '', roles: [], active: true })
     }
 
     // Check for duplicate title
-    const duplicate = await Note.findOne({ title }).lean().exec();
-
+    const duplicate = await Note.findOne({ title }).lean().exec()
     if (duplicate) {
-        return res.status(409).json({ message: 'Duplicate note title' });
+        return res.status(409).json({ message: 'Duplicate note title' })
     }
 
-    // Create and store the new user 
-    const note = await Note.create({ user, title, text });
-
-    if (note) { // Created 
-        return res.status(201).json({ message: 'New note created' });
+    // Create and store the new note
+    const note = await Note.create({ user: existingUser._id, title, text })
+    if (note) {
+        return res.status(201).json({ message: 'New note created' })
     } else {
-        return res.status(400).json({ message: 'Invalid note data received' });
+        return res.status(400).json({ message: 'Invalid note data received' })
     }
-});
+})
 
 // @desc Update a note
 // @route PATCH /notes
 // @access Private
 const updateNote = asyncHandler(async (req, res) => {
-    const { id, user, title, text, completed } = req.body;
+    let { id, user, title, text, completed } = req.body
+
+    // Strip Zero Width Space characters
+    id = stripZeroWidthSpace(id)
+    user = stripZeroWidthSpace(user)
+    title = stripZeroWidthSpace(title)
+    text = stripZeroWidthSpace(text)
 
     // Confirm data
     if (!id || !user || !title || !text || typeof completed !== 'boolean') {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({ message: 'All fields are required' })
     }
 
     // Confirm note exists to update
-    const note = await Note.findById(id).exec();
-
+    const note = await Note.findById(id).exec()
     if (!note) {
-        return res.status(400).json({ message: 'Note not found' });
+        return res.status(400).json({ message: 'Note not found' })
     }
 
     // Check for duplicate title
-    const duplicate = await Note.findOne({ title }).lean().exec();
-
-    // Allow renaming of the original note 
+    const duplicate = await Note.findOne({ title }).lean().exec()
     if (duplicate && duplicate?._id.toString() !== id) {
-        return res.status(409).json({ message: 'Duplicate note title' });
+        return res.status(409).json({ message: 'Duplicate note title' })
     }
 
-    note.user = user;
-    note.title = title;
-    note.text = text;
-    note.completed = completed;
+    note.user = user
+    note.title = title
+    note.text = text
+    note.completed = completed
 
-    const updatedNote = await note.save();
-
-    res.json(`'${updatedNote.title}' updated`);
-});
+    const updatedNote = await note.save()
+    res.json(`'${updatedNote.title}' updated`)
+})
 
 // @desc Delete a note
 // @route DELETE /notes
 // @access Private
 const deleteNote = asyncHandler(async (req, res) => {
-    const { id } = req.body;
+    let { id } = req.body
+
+    // Strip Zero Width Space characters
+    id = stripZeroWidthSpace(id)
 
     // Confirm data
     if (!id) {
-        return res.status(400).json({ message: 'Note ID required' });
+        return res.status(400).json({ message: 'Note ID required' })
     }
 
     // Confirm note exists to delete 
-    const note = await Note.findById(id).exec();
-
+    const note = await Note.findById(id).exec()
     if (!note) {
-        return res.status(400).json({ message: 'Note not found' });
+        return res.status(400).json({ message: 'Note not found' })
     }
 
-    const result = await note.deleteOne();
-
-    const reply = `Note '${result.title}' with ID ${result._id} deleted`;
-
-    res.json(reply);
-});
+    const result = await note.deleteOne()
+    const reply = `Note '${result.title}' with ID ${result._id} deleted`
+    res.json(reply)
+})
 
 module.exports = {
     getAllNotes,
     createNewNote,
     updateNote,
     deleteNote
-};
+}
