@@ -1,0 +1,134 @@
+pipeline {
+    agent any
+    
+    environment {
+        SONAR_HOST_URL = 'http://172.20.0.3:9000'
+        SONARQUBE_TOKEN = credentials('sonarqube-token')
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_CREDENTIALS_ID = 'Docker_Hub_Credentials'
+        DOCKER_IMAGE_NAME = 'hadilbelhadj/technotes'
+        NODE_PATH = '/usr/bin/node'
+        SLACK_CHANNEL = '#cicd'
+        SLACK_CREDENTIALS_ID = 'slack_token'
+        RENDER_API_TOKEN = credentials('render-api-token')
+        RENDER_SERVICE_ID = 'srv-cqf5ib08fa8c73ekeulg'
+    }
+    stages {
+        stage('Clone Code') {
+            steps {
+                git branch: 'main', credentialsId: 'githubtoken', url: 'https://github.com/hadilbelhadj/Technotes.git'
+            }
+        }
+        stage('Create .env File') {
+            steps {
+                script {
+                    def envContent = 'DATABASE_URI=mongodb+srv://root:root@technotes.ejcyzxy.mongodb.net/'
+                    writeFile file: '.env', text: envContent
+                }
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    def envContent = 'sonar.projectKey=test-project'
+                    writeFile file: 'sonar-project.properties', text: envContent
+                    
+                    def scannerHome = tool name: 'SonarQubeServer', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+
+                    withSonarQubeEnv('SonarQubeServer') {
+                        env.SONAR_SCANNER_OPTS = "-Dsonar.nodejs.executable=${NODE_PATH}"
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
+                }
+            }
+        }
+        stage('Quality Gate Status Check') {
+            steps {
+                script {
+                    timeout(time: 1, unit: 'HOURS') {
+                        def qualityGate = waitForQualityGate()
+                        if (qualityGate.status == 'OK') {
+                            slackSend(channel: SLACK_CHANNEL, color: 'good', message: "SonarQube Quality Gate passed!")
+                        } else {
+                            slackSend(channel: SLACK_CHANNEL, color: 'danger', message: "SonarQube Quality Gate failed!")
+                            error("Quality Gate failed")
+                        }
+                    }
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t ${DOCKER_IMAGE_NAME}:${env.BUILD_ID} ."
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    withDockerRegistry([credentialsId: DOCKER_CREDENTIALS_ID, url: ""]) {
+                        sh "docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${env.BUILD_ID}"
+                    }
+                }
+            }
+
+
+    }
+        stage('Trivy Scan') {
+            steps {
+                script {
+                    sh 'trivy --version'
+                    sh "trivy image ${DOCKER_IMAGE_NAME}:${env.BUILD_ID} > trivy-report.txt"
+                    def report = readFile('trivy-report.txt')
+                    if (report.contains("VULNERABILITY")) {
+                        error("Vulnerabilities found in the Docker image")
+                    } else {
+                        echo "No vulnerabilities found in the Docker image"
+                    }
+                }
+            }
+        }
+stage('Deploy to Render') {
+    steps {
+        script {
+            // Get the latest commit hash
+            def commitHash = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+
+            // Trigger a deployment in Render
+            def deploymentResponse = sh(script: """
+            curl -X POST https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys \
+            -H "Authorization: Bearer ${RENDER_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"branch": "main", "commit": "${commitHash}"}'
+            """, returnStdout: true).trim()
+
+            echo "Deployment response: ${deploymentResponse}"
+
+            // Wait for 30 seconds before checking the deployment status
+            sleep(30)
+
+            // Check the status of the deployment
+            def statusCheckResponse = sh(script: """
+            curl -X GET https://api.render.com/v1/deploys/${deploymentResponse}/status \
+            -H "Authorization: Bearer ${RENDER_API_TOKEN}"
+            """, returnStdout: true).trim()
+
+            echo "Deployment status response: ${statusCheckResponse}"
+
+            // Check the response for successful deployment
+            if (statusCheckResponse.contains('"status":"live"')) {
+                slackSend(channel: SLACK_CHANNEL, color: 'good', message: "Deployment to Render succeeded! Response: ${statusCheckResponse}")
+            } else if (statusCheckResponse.contains('"status":"update_in_progress"')) {
+                slackSend(channel: SLACK_CHANNEL, color: 'warning', message: "Deployment to Render is still in progress. Response: ${statusCheckResponse}")
+            } else {
+                slackSend(channel: SLACK_CHANNEL, color: 'danger', message: "Deployment to Render failed! Response: ${statusCheckResponse}")
+                error("Deployment failed")
+            }
+        }
+    }
+}
+
+
+}
+}
