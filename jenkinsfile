@@ -16,7 +16,7 @@ pipeline {
     stages {
         stage('Clone Code') {
             steps {
-                git branch: 'main', credentialsId: 'githubtoken', url: 'https://github.com/hadilbelhadj/Technotes.git'
+                git branch: 'main', credentialsId: 'githubtoken', url: 'https://github.com/FediMechergui/server.git'
             }
         }
         stage('Create .env File') {
