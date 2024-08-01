@@ -142,6 +142,7 @@ The next step is to configure Jenkins and SonarQube. To do this, follow these st
 * Install the necessary plugins in Jenkins.
 * Change the login password for each tool. Some of them will prompt you to change the password after putting in the initial user and password.
 * Integrate Github and Sonar with Jenkins:
+  
 ****Github Credentials:
 -    - Navigate to your Jenkins dashboard.
     - Go to **Manage Jenkins** > **Manage Credentials** (or **Manage Credentials** directly if available).
