@@ -240,7 +240,7 @@ networks:
     docker-compose up -d
 ```
 
-    This command will start the Jenkins and SonarQube containers in detached mode.
+This command will start the Jenkins and SonarQube containers in detached mode.
 
  **3.Verify the containers are running:**
 
@@ -248,7 +248,7 @@ networks:
     docker-compose ps
 ```
 
-    You should see both Jenkins and SonarQube containers listed and running.
+You should see both Jenkins and SonarQube containers listed and running.
 
 ## Accessing the Services
 
