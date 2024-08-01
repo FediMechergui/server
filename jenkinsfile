@@ -105,26 +105,7 @@ stage('Deploy to Render') {
 
             echo "Deployment response: ${deploymentResponse}"
 
-            // Wait for 30 seconds before checking the deployment status
-            sleep(30)
 
-            // Check the status of the deployment
-            def statusCheckResponse = sh(script: """
-            curl -X GET https://api.render.com/v1/deploys/${deploymentResponse}/status \
-            -H "Authorization: Bearer ${RENDER_API_TOKEN}"
-            """, returnStdout: true).trim()
-
-            echo "Deployment status response: ${statusCheckResponse}"
-
-            // Check the response for successful deployment
-            if (statusCheckResponse.contains('"status":"live"')) {
-                slackSend(channel: SLACK_CHANNEL, color: 'good', message: "Deployment to Render succeeded! Response: ${statusCheckResponse}")
-            } else if (statusCheckResponse.contains('"status":"update_in_progress"')) {
-                slackSend(channel: SLACK_CHANNEL, color: 'warning', message: "Deployment to Render is still in progress. Response: ${statusCheckResponse}")
-            } else {
-                slackSend(channel: SLACK_CHANNEL, color: 'danger', message: "Deployment to Render failed! Response: ${statusCheckResponse}")
-                error("Deployment failed")
-            }
         }
     }
 }
