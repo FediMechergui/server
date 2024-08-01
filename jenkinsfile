@@ -104,6 +104,7 @@ stage('Deploy to Render') {
             """, returnStdout: true).trim()
 
             echo "Deployment response: ${deploymentResponse}"
+            slackSend(channel: SLACK_CHANNEL, color: 'good', message: "Deployement to Render passed!")
 
 
         }
